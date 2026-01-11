@@ -1,0 +1,71 @@
+/Users/I771741/Library/CloudStorage/OneDrive-SAPSE/University/AlgoBio/CBioHackathon/CN_baseline/evaluate_model.py:538: MatplotlibDeprecationWarning: The 'labels' parameter of boxplot() has been renamed 'tick_labels' since Matplotlib 3.9; support for the old name will be dropped in 3.11.
+  box = ax2.boxplot(data_to_plot, labels=['Correct', 'Incorrect'],
+============================================================
+Common Neighbors Model - Evaluation with Train/Val/Test Split
+============================================================
+
+Loading graph from ../string_interaction_physical.tsv...
+Total unique edges: 4297
+Total nodes: 354
+
+Splitting data (train=0.7, val=0.15, test=0.15)...
+Train edges: 3007
+Validation edges: 644
+Test edges: 646
+
+Building training graph...
+
+============================================================
+HYPERPARAMETER TUNING ON VALIDATION SET
+============================================================
+
+Testing 10 thresholds × 5 top-k values...
+
+Top 10 configurations on validation set:
+ threshold top_k  precision   recall       f1  accuracy
+      10.0   all   0.446855 0.639752 0.526181  0.987524
+       9.0   all   0.428717 0.653727 0.517835  0.986818
+       8.0   all   0.397969 0.669255 0.499131  0.985456
+       7.0   all   0.363485 0.680124 0.473770  0.983640
+       6.0   all   0.337386 0.689441 0.453061  0.981975
+       3.0   500   0.510000 0.395963 0.445804  0.989340
+       9.0   500   0.510000 0.395963 0.445804  0.989340
+       8.0   500   0.510000 0.395963 0.445804  0.989340
+       7.0   500   0.510000 0.395963 0.445804  0.989340
+       6.0   500   0.510000 0.395963 0.445804  0.989340
+
+============================================================
+BEST PARAMETERS (Validation F1=0.5262):
+  Threshold: 10.0
+  Top-K: all
+============================================================
+
+============================================================
+FINAL EVALUATION ON TEST SET
+============================================================
+
+Test Set Results:
+  Accuracy: 0.9874
+  Precision: 0.4447
+  Recall: 0.6347
+  F1 Score: 0.5230
+  Total predictions: 922
+  Correct predictions: 410
+
+Top 10 predictions on test set:
+  1. UQCRC1 <-> MT-CO1: 40.928 [✗ INCORRECT]
+  2. COX7B <-> MT-CO3: 38.219 [✗ INCORRECT]
+  3. COX5A <-> UQCRQ: 37.577 [✓ CORRECT]
+  4. NDUFA6 <-> NDUFA10: 36.186 [✗ INCORRECT]
+  5. NDUFA11 <-> NDUFA10: 34.927 [✓ CORRECT]
+  6. MT-ND2 <-> NDUFC1: 34.909 [✓ CORRECT]
+  7. NDUFS2 <-> NDUFB8: 34.880 [✓ CORRECT]
+  8. NDUFA7 <-> NDUFA8: 34.794 [✗ INCORRECT]
+  9. NDUFV1 <-> NDUFA10: 34.431 [✓ CORRECT]
+  10. MT-ND5 <-> NDUFC1: 34.317 [✓ CORRECT]
+
+Validation results saved to validation_results.tsv
+Test predictions saved to test_predictions.tsv
+
+Generating visualizations...
+Visualizations saved to output folder
