@@ -66,7 +66,7 @@ ipython_config.py
 
 # Model files
 *.model
-*_embeddings.pkl
+
 
 # Results
 *.txt
