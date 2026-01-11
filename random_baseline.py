@@ -15,25 +15,27 @@ class RandomBaseline:
         return actual_edges / total_possible_edges 
         
     def predict(self):
-        # For each possible (non-existing) edge, predict based on edge probability
+        # For each possible (non-existing) edge, return random score 0-1
         predictions = {}
         nodes = list(self.G.nodes())
         for u, v in combinations(nodes, 2):  # Automatically all unique pairs
             if not self.G.has_edge(u, v):
-                predictions[(u, v)] = random.random() < self.edge_prob
+                predictions[(u, v)] = random.random()
         return predictions
 
 
 def main():
     G = utils.load_graph()
-    G_train, test_edges = utils.graph_train_test_split(G, test_ratio=0.2, rnd_seed=41)
+    G_train, test_edges, non_train_edges = utils.graph_train_test_split(G, test_ratio=0.2, rnd_seed=41)
     model = RandomBaseline(G_train)
-    predictions = model.predict()
-    tp, fp, tn, fn = utils.compare_predictions(predictions, test_edges)
     
-    # Print the number of edges guessed (correctly and incorrectly)
-    num_predicted_edges = sum(predictions.values())
-    print(f"Number of edges predicted to exist: {num_predicted_edges}/{len(predictions)}")
+    # Get scores for binary predictions
+    predictions_scores = model.predict()
+    
+    # Convert to binary predictions (threshold 0.5)
+    predictions_binary = {k: (v > 0.5) for k, v in predictions_scores.items()}
+    
+    tp, fp, tn, fn = utils.compare_predictions(predictions_binary, test_edges, non_train_edges)
     
     accuracy, precision, recall, f1_score = utils.calculate_metrics(tp, fp, tn, fn)
     
