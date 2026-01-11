@@ -63,18 +63,12 @@ ipython_config.py
 *~
 .DS_Store
 
-# Output files
-output/
-*.png
-*.jpg
-*.pdf
 
 # Model files
 *.model
 *_embeddings.pkl
 
 # Results
-*.tsv
 *.txt
 !requirements.txt
 !README*.txt
