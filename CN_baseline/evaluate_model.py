@@ -124,6 +124,7 @@ def predict_and_score(train_adjacency, train_edges_set, test_edges, all_nodes,
         - precision: proportion of predicted edges that are correct
         - recall: proportion of test edges that were predicted
         - f1: harmonic mean of precision and recall
+        - accuracy: proportion of all predictions (positive and negative) that are correct
         - predictions: list of (node1, node2, score, is_correct)
     """
     # Get test edges as set of tuples (both directions)
@@ -134,6 +135,7 @@ def predict_and_score(train_adjacency, train_edges_set, test_edges, all_nodes,
     
     # Get all possible node pairs not in training set
     node_list = list(all_nodes)
+    all_candidate_pairs = []
     predictions = []
     
     for i, node_x in enumerate(node_list):
@@ -144,10 +146,12 @@ def predict_and_score(train_adjacency, train_edges_set, test_edges, all_nodes,
             
             score = calculate_common_neighbor_score(node_x, node_y, train_adjacency)
             
+            # Check if this edge is in test set
+            is_in_test = (node_x, node_y) in test_edges_set or (node_y, node_x) in test_edges_set
+            all_candidate_pairs.append((node_x, node_y, score, is_in_test))
+            
             if score > 0:
-                # Check if this edge is in test set
-                is_correct = (node_x, node_y) in test_edges_set or (node_y, node_x) in test_edges_set
-                predictions.append((node_x, node_y, score, is_correct))
+                predictions.append((node_x, node_y, score, is_in_test))
     
     # Sort by score
     predictions.sort(key=lambda x: x[2], reverse=True)
@@ -161,15 +165,27 @@ def predict_and_score(train_adjacency, train_edges_set, test_edges, all_nodes,
     
     # Calculate metrics
     if len(filtered_predictions) == 0:
-        return 0.0, 0.0, 0.0, filtered_predictions
+        return 0.0, 0.0, 0.0, 0.0, filtered_predictions
     
+    # For filtered predictions
     true_positives = sum(1 for _, _, _, is_correct in filtered_predictions if is_correct)
+    false_positives = len(filtered_predictions) - true_positives
+    false_negatives = len(test_edges) - true_positives
+    
+    # True negatives: candidate pairs not predicted and not in test set
+    predicted_pairs = set((n1, n2) for n1, n2, _, _ in filtered_predictions)
+    true_negatives = sum(1 for n1, n2, _, is_in_test in all_candidate_pairs 
+                        if (n1, n2) not in predicted_pairs and not is_in_test)
     
     precision = true_positives / len(filtered_predictions) if len(filtered_predictions) > 0 else 0
     recall = true_positives / len(test_edges) if len(test_edges) > 0 else 0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
     
-    return precision, recall, f1, filtered_predictions
+    # Accuracy = (TP + TN) / (TP + TN + FP + FN)
+    total = true_positives + true_negatives + false_positives + false_negatives
+    accuracy = (true_positives + true_negatives) / total if total > 0 else 0
+    
+    return precision, recall, f1, accuracy, filtered_predictions
 
 def main():
     parser = argparse.ArgumentParser(
@@ -262,7 +278,7 @@ def main():
     
     for threshold in thresholds:
         for top_k in top_k_values:
-            precision, recall, f1, _ = predict_and_score(
+            precision, recall, f1, accuracy, _ = predict_and_score(
                 train_adjacency, train_edges_set, val_edges, all_nodes, threshold, top_k
             )
             
@@ -271,7 +287,8 @@ def main():
                 'top_k': top_k if top_k else 'all',
                 'precision': precision,
                 'recall': recall,
-                'f1': f1
+                'f1': f1,
+                'accuracy': accuracy
             })
             
             if f1 > best_f1:
@@ -296,12 +313,13 @@ def main():
     print("FINAL EVALUATION ON TEST SET")
     print("="*60)
     
-    test_precision, test_recall, test_f1, test_predictions = predict_and_score(
+    test_precision, test_recall, test_f1, test_accuracy, test_predictions = predict_and_score(
         train_adjacency, train_edges_set, test_edges, all_nodes,
         best_params['threshold'], best_params['top_k']
     )
     
     print(f"\nTest Set Results:")
+    print(f"  Accuracy: {test_accuracy:.4f}")
     print(f"  Precision: {test_precision:.4f}")
     print(f"  Recall: {test_recall:.4f}")
     print(f"  F1 Score: {test_f1:.4f}")
@@ -335,11 +353,11 @@ def main():
     
     # Generate visualizations
     print(f"\nGenerating visualizations...")
-    generate_plots(results_df_sorted, test_precision, test_recall, test_f1, 
+    generate_plots(results_df_sorted, test_precision, test_recall, test_f1, test_accuracy,
                    test_predictions, best_params)
     print(f"Visualizations saved to output folder")
 
-def generate_plots(results_df, test_precision, test_recall, test_f1, 
+def generate_plots(results_df, test_precision, test_recall, test_f1, test_accuracy,
                    test_predictions, best_params):
     """Generate visualization plots for the evaluation results."""
     
@@ -399,12 +417,12 @@ def generate_plots(results_df, test_precision, test_recall, test_f1,
     plt.savefig('output/hyperparameter_heatmap.png', dpi=300, bbox_inches='tight')
     plt.close()
     
-    # 2. Metrics Comparison (Precision, Recall, F1)
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # 2. Metrics Comparison (Accuracy, Precision, Recall, F1)
+    fig, ax = plt.subplots(figsize=(12, 6))
     
-    metrics = ['Precision', 'Recall', 'F1 Score']
-    values = [test_precision, test_recall, test_f1]
-    colors = ['#3498db', '#e74c3c', '#2ecc71']
+    metrics = ['Accuracy', 'Precision', 'Recall', 'F1 Score']
+    values = [test_accuracy, test_precision, test_recall, test_f1]
+    colors = ['#f39c12', '#3498db', '#e74c3c', '#2ecc71']
     
     bars = ax.bar(metrics, values, color=colors, alpha=0.7, edgecolor='black', linewidth=1.5)
     
@@ -629,6 +647,7 @@ def generate_plots(results_df, test_precision, test_recall, test_f1,
     • Top-K: {best_params['top_k'] if best_params['top_k'] else 'all'}
     
     TEST SET PERFORMANCE:
+    • Accuracy: {test_accuracy:.4f} ({test_accuracy*100:.2f}%)
     • Precision: {test_precision:.4f} ({test_precision*100:.2f}%)
     • Recall: {test_recall:.4f} ({test_recall*100:.2f}%)
     • F1 Score: {test_f1:.4f}
@@ -639,8 +658,9 @@ def generate_plots(results_df, test_precision, test_recall, test_f1,
     • Incorrect Predictions: {sum(1 for _, _, _, c in test_predictions if not c)}
     
     INTERPRETATION:
-    • Of all predictions made, {test_precision*100:.1f}% were correct
-    • Found {test_recall*100:.1f}% of all actual interactions
+    • Accuracy: {test_accuracy*100:.1f}% of all predictions (pos+neg) correct
+    • Precision: {test_precision*100:.1f}% of predicted edges were correct
+    • Recall: Found {test_recall*100:.1f}% of all actual interactions
     • F1 score balances precision and recall
     """
     
