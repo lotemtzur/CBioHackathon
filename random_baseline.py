@@ -26,7 +26,7 @@ class RandomBaseline:
 
 def main():
     G = utils.load_graph()
-    G_train, test_edges, non_train_edges = utils.graph_train_test_split(G, test_ratio=0.2, rnd_seed=41)
+    G_train, test_edges, non_train_edges = utils.graph_split_rnd(G, test_ratio=0.2, rnd_seed=41)
     model = RandomBaseline(G_train)
     
     # Get scores for binary predictions

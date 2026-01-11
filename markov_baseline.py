@@ -52,7 +52,7 @@ class RandomWalkBaseline:
 def tune_alpha(G_train, alphas=[0.01, 0.05, 0.1, 0.15, 0.2, 0.5, 0.8]):
     print("\n--- Starting Alpha Tuning ---")
     
-    G_val_train, val_edges, val_non_train = utils.graph_train_test_split(
+    G_val_train, val_edges, val_non_train = utils.graph_split_rnd(
         G_train, test_ratio=0.2, rnd_seed=42
     )
     
@@ -100,7 +100,7 @@ def tune_alpha(G_train, alphas=[0.01, 0.05, 0.1, 0.15, 0.2, 0.5, 0.8]):
 def main():
     # Load graph
     G = utils.load_graph()
-    G_train, test_edges, non_train_edges = utils.graph_train_test_split(G, test_ratio=0.9, rnd_seed=41)
+    G_train, test_edges, non_train_edges = utils.preserve_density_split(G, test_ratio=0.4, n_bins=10, rnd_seed=41)
     
     optimal_alpha = tune_alpha(G_train)
     
