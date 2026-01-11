@@ -3,6 +3,11 @@ import torch
 import pickle
 import sys
 import argparse
+import ssl
+import certifi
+
+# Fix SSL certificate verification issue
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 def get_esm_embeddings(fasta_file, model_name="esm2_t33_650M_UR50D"):
