@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, roc_auc_score
 from itertools import combinations
 import numpy as np
+import pickle
 
 
 def load_graph(file_path="string_interactions_short.tsv"):
@@ -412,4 +413,60 @@ def structure_preserving_edge_split(G, test_ratio=0.2, seed=42):
             neg_test_edges.add(edge)
             
     return G_train, test_edges, list(neg_test_edges)
+
+
+def load_protein_embeddings(filepath="protein_embeddings.pkl"):
+    """Load pre-computed ESM embeddings from pickle file."""
+    try:
+        with open(filepath, 'rb') as f:
+            embeddings = pickle.load(f)
+        print(f"Loaded embeddings for {len(embeddings)} proteins")
+        return embeddings
+    except FileNotFoundError:
+        print(f"Error: Embeddings file '{filepath}' not found")
+        print("Please run: python extract_proteins_representations.py --fasta string_protein_sequences.fa")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error loading embeddings: {e}")
+        sys.exit(1)
+
+
+def create_protein_id_mapping(tsv_file="string_interactions_short.tsv"):
+    """
+    Create mapping between gene names (graph nodes) and protein IDs (embedding keys).
+    Returns: dict mapping gene_name -> protein_id
+    """
+    df = pd.read_csv(tsv_file, sep='\t')
+    df.columns = df.columns.str.lstrip('#')
+    
+    mapping = {}
+    # node1 -> node1_string_id
+    for _, row in df.iterrows():
+        mapping[row['node1']] = row['node1_string_id']
+        mapping[row['node2']] = row['node2_string_id']
+    
+    print(f"Created mapping for {len(mapping)} gene names")
+    return mapping
+
+
+def cosine_similarity(vec1, vec2):
+    """Compute cosine similarity between two vectors."""
+    # Handle torch tensors if present (lazy import)
+    try:
+        import torch
+        if isinstance(vec1, torch.Tensor):
+            vec1 = vec1.numpy()
+        if isinstance(vec2, torch.Tensor):
+            vec2 = vec2.numpy()
+    except ImportError:
+        pass  # torch not available, assume numpy arrays
+    
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    
+    return dot_product / (norm1 * norm2)
 
