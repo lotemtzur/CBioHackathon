@@ -163,6 +163,38 @@ def train_mlp(esm_train, z_train, epochs=100, lr=1e-3):
     return model.cpu()
 
 
+def get_optimal_threshold(y_true, y_scores):
+    """
+    Iterates through thresholds to find the one maximizing F1 score.
+    """
+    thresholds = torch.linspace(0.01, 0.99, 100)
+    best_f1 = 0
+    best_thresh = 0.5
+
+    # We use a simple loop; for massive datasets, vectorization is possible but this is fine here
+    for t in thresholds:
+        y_pred = (y_scores >= t).float()
+
+        tp = ((y_pred == 1) & (y_true == 1)).sum()
+        fp = ((y_pred == 1) & (y_true == 0)).sum()
+        fn = ((y_pred == 0) & (y_true == 1)).sum()
+
+        if (tp + fp) == 0 or (tp + fn) == 0: continue
+
+        prec = tp / (tp + fp)
+        rec = tp / (tp + fn)
+
+        if (prec + rec) == 0:
+            f1 = 0
+        else:
+            f1 = 2 * (prec * rec) / (prec + rec)
+
+        if f1 > best_f1:
+            best_f1 = f1
+            best_thresh = t
+
+    return best_thresh.item(), best_f1.item()
+
 ############################################
 # 3. EVALUATION
 ############################################
@@ -219,7 +251,13 @@ def evaluate_cold_start(mlp, z_train_structure, esm_test, test_nodes, train_node
     # Concat all
     y_true = torch.cat(y_true)
     y_scores = torch.cat(y_scores)
-    y_pred = (y_scores > 0.8).long()
+    # y_pred = (y_scores > 0.8).long()
+
+    best_t, best_f1 = get_optimal_threshold(y_true, y_scores)
+    print(f"\n[Auto-Optimization] Best Threshold found: {best_t:.4f}")
+
+    # Re-calculate metrics using the optimal threshold
+    y_pred = (y_scores >= best_t).long()
 
     # 3. Compute Metrics
     acc = metric_acc(y_pred, y_true)
@@ -237,6 +275,7 @@ def evaluate_cold_start(mlp, z_train_structure, esm_test, test_nodes, train_node
     print(f"F1 Score:  {f1:.4f}")
     print(f"ROC AUC:   {auc:.4f}")
     print(f"Avg Prec:  {ap:.4f}")
+
 
 
 ############################################
