@@ -230,12 +230,12 @@ def split_data_semi_inductive(G, test_ratio=0.2, val_ratio=0.1, rnd_seed=42):
 
     # 3. Negative Sampling 
     # (Important: Negatives for Test must involve at least one Test node)
-    def sample_negatives(pos_edges, allowed_nodes, target_nodes=None):
+    def sample_negatives(pos_edges, allowed_nodes, target_nodes=None, multiplier=1):
         neg_edges = []
         node_list = list(allowed_nodes)
         target_list = list(target_nodes) if target_nodes else node_list
         
-        target_count = len(pos_edges)
+        target_count = len(pos_edges) * multiplier
         while len(neg_edges) < target_count:
             u = random.choice(target_list) # One node must be from the 'new' set
             v = random.choice(node_list)   # The other can be anywhere allowed
@@ -243,9 +243,9 @@ def split_data_semi_inductive(G, test_ratio=0.2, val_ratio=0.1, rnd_seed=42):
                 neg_edges.append((u, v))
         return neg_edges
 
-    train_neg = sample_negatives(train_pos, train_nodes)
-    val_neg = sample_negatives(val_pos, train_nodes | val_nodes, val_nodes)
-    test_neg = sample_negatives(test_pos, nodes, test_nodes)
+    train_neg = sample_negatives(train_pos, train_nodes, multiplier=1)
+    val_neg = sample_negatives(val_pos, train_nodes | val_nodes, val_nodes, multiplier=10)
+    test_neg = sample_negatives(test_pos, nodes, test_nodes, multiplier=10)
 
     # 4. Finalize
     train_data = [(u, v, 1) for u, v in train_pos] + [(u, v, 0) for u, v in train_neg]
