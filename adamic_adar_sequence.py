@@ -40,7 +40,9 @@ class AdamicAdarSequence:
         self.train_nodes = list(G_train.nodes())
         self.train_embeddings = {}
         for node in self.train_nodes:
-            protein_id = gene_to_protein_id.get(node)
+            # Node names in the graph are already protein IDs
+            # Try direct lookup first, then fallback to gene_to_protein_id mapping
+            protein_id = node if node in embeddings else gene_to_protein_id.get(node)
             if protein_id and protein_id in embeddings:
                 self.train_embeddings[node] = embeddings[protein_id]
         
@@ -56,7 +58,9 @@ class AdamicAdarSequence:
         Returns:
             list of (train_node, similarity_score) tuples
         """
-        test_protein_id = self.gene_to_protein_id.get(test_node)
+        # Node names in the graph are already protein IDs
+        # Try direct lookup first, then fallback to gene_to_protein_id mapping
+        test_protein_id = test_node if test_node in self.embeddings else self.gene_to_protein_id.get(test_node)
         if not test_protein_id or test_protein_id not in self.embeddings:
             return []
         
@@ -170,16 +174,31 @@ class AdamicAdarSequence:
             dict mapping test_node -> list of (partner, score) tuples
         """
         predictions = {}
+        nodes_without_embeddings = 0
+        nodes_with_no_predictions = 0
         
         for i, test_node in enumerate(test_nodes):
             if (i + 1) % 10 == 0:
                 print(f"Processing test node {i+1}/{len(test_nodes)}...")
             
+            # Check if node has embedding
+            # Node names in the graph are already protein IDs
+            test_protein_id = test_node if test_node in self.embeddings else self.gene_to_protein_id.get(test_node)
+            if not test_protein_id or test_protein_id not in self.embeddings:
+                nodes_without_embeddings += 1
+            
             scores = self.predict_for_node(test_node)
+            
+            if not scores:
+                nodes_with_no_predictions += 1
             
             # Sort by score and take top k
             sorted_partners = sorted(scores.items(), key=lambda x: x[1], reverse=True)
             predictions[test_node] = sorted_partners[:top_k]
+        
+        print(f"\nDiagnostics:")
+        print(f"  Test nodes without embeddings: {nodes_without_embeddings}/{len(test_nodes)}")
+        print(f"  Test nodes with no predictions: {nodes_with_no_predictions}/{len(test_nodes)}")
         
         return predictions
 
