@@ -21,8 +21,11 @@ def load_graph(file_path="string_interactions_short.tsv"):
     G = nx.Graph()
     
     # Add edges with combined_score as weight
+    use_ids = 'node1_string_id' in df.columns and 'node2_string_id' in df.columns
     for _, row in df.iterrows():
-        G.add_edge(row['node1'], row['node2'], weight=row['combined_score'])
+        u = row['node1_string_id'] if use_ids else row['node1']
+        v = row['node2_string_id'] if use_ids else row['node2']
+        G.add_edge(u, v, weight=row['combined_score'])
     
     print(f"Graph loaded with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
     return G
@@ -99,6 +102,158 @@ def plot_roc_curve(predictions_dict, test_edges, non_train_edges, model_name=Non
     plt.show()
     
     return auc_score
+
+# ============ Train Val Test Split - w/ Negative Samples Logic =============   
+
+def split_data_with_negatives(G, test_ratio=0.2, val_ratio=0.1, rnd_seed=42):
+    """
+    Splits edges into Train, Val, and Test sets with 1:1 positive-to-negative ratio.
+    
+    Returns:
+        train_data, val_data, test_data: Lists of (u, v, label)
+    """
+    random.seed(rnd_seed)
+    nodes = list(G.nodes())
+    
+    pos_edges = list(G.edges())
+    neg_edges = [edge for edge in combinations(nodes, 2) if not G.has_edge(*edge)]
+    
+    random.shuffle(pos_edges)
+    random.shuffle(neg_edges)
+    
+    n_pos = len(pos_edges)
+    n_test = int(n_pos * test_ratio)
+    n_val = int(n_pos * val_ratio)
+    n_train = n_pos - n_test - n_val
+    
+    train_pos = pos_edges[:n_train]
+    val_pos = pos_edges[n_train:n_train + n_val]
+    test_pos = pos_edges[n_train + n_val:]
+    
+    train_neg = neg_edges[:n_train]
+    val_neg = neg_edges[n_train:n_train + n_val]
+    test_neg = neg_edges[n_train + n_val:n_train + n_val + n_test]
+    
+    def package(pos, neg):
+        data = [(u, v, 1) for u, v in pos] + [(u, v, 0) for u, v in neg]
+        random.shuffle(data)
+        return data
+
+    train_data = package(train_pos, train_neg)
+    val_data = package(val_pos, val_neg)
+    test_data = package(test_pos, test_neg)
+    
+    print(f"Split complete: Train={len(train_data)}, Val={len(val_data)}, Test={len(test_data)}")
+    return train_data, val_data, test_data
+
+
+def split_data_vertex_with_negatives(G, test_ratio=0.2, val_ratio=0.1, rnd_seed=42):
+    """
+    Vertex-based split: Partitions nodes into Train, Val, Test.
+    Train Data = Edges within Train Nodes + Negatives within Train Nodes.
+    Val Data = Edges within Val Nodes + Negatives within Val Nodes.
+    Test Data = Edges within Test Nodes + Negatives within Test Nodes.
+    """
+    random.seed(rnd_seed)
+    nodes = list(G.nodes())
+    random.shuffle(nodes)
+    
+    n_total = len(nodes)
+    n_test = int(n_total * test_ratio)
+    n_val = int(n_total * val_ratio)
+    n_train = n_total - n_test - n_val
+    
+    train_nodes = set(nodes[:n_train])
+    val_nodes = set(nodes[n_train:n_train + n_val])
+    test_nodes = set(nodes[n_train + n_val:])
+    
+    def process_subgraph(node_set):
+        subgraph = G.subgraph(node_set)
+        pos_edges = list(subgraph.edges())
+        
+        # Negative sampling (1:1 ratio)
+        neg_edges = []
+        node_list = list(node_set)
+        if len(node_list) < 2:
+            return []
+            
+        target_count = len(pos_edges)
+        count = 0
+        attempts = 0
+        max_attempts = target_count * 10
+        
+        while count < target_count and attempts < max_attempts:
+            u, v = random.sample(node_list, 2)
+            if not G.has_edge(u, v):
+                neg_edges.append((u, v))
+                count += 1
+            attempts += 1
+            
+        data = [(u, v, 1) for u, v in pos_edges] + [(u, v, 0) for u, v in neg_edges]
+        random.shuffle(data)
+        return data
+
+    train_data = process_subgraph(train_nodes)
+    val_data = process_subgraph(val_nodes)
+    test_data = process_subgraph(test_nodes)
+    
+    print(f"Vertex Split: Train={len(train_data)}, Val={len(val_data)}, Test={len(test_data)}")
+    return train_data, val_data, test_data
+
+
+def split_data_semi_inductive(G, test_ratio=0.2, val_ratio=0.1, rnd_seed=42):
+    random.seed(rnd_seed)
+    nodes = list(G.nodes())
+    random.shuffle(nodes)
+    
+    n_total = len(nodes)
+    n_test = int(n_total * test_ratio)
+    n_val = int(n_total * val_ratio)
+    
+    # 1. Define the Node Sets
+    test_nodes = set(nodes[:n_test])
+    val_nodes = set(nodes[n_test:n_test + n_val])
+    train_nodes = set(nodes[n_test + n_val:])
+    
+    train_pos, val_pos, test_pos = [], [], []
+
+    # 2. Assign Edges based on "Strictness"
+    for u, v in G.edges():
+        # If both are in Train -> Train Set
+        if u in train_nodes and v in train_nodes:
+            train_pos.append((u, v))
+        # If at least one is in Test (and neither in Val) -> Test Set
+        elif u in test_nodes or v in test_nodes:
+            test_pos.append((u, v))
+        # If at least one is in Val (and not in Test) -> Val Set
+        elif u in val_nodes or v in val_nodes:
+            val_pos.append((u, v))
+
+    # 3. Negative Sampling 
+    # (Important: Negatives for Test must involve at least one Test node)
+    def sample_negatives(pos_edges, allowed_nodes, target_nodes=None):
+        neg_edges = []
+        node_list = list(allowed_nodes)
+        target_list = list(target_nodes) if target_nodes else node_list
+        
+        target_count = len(pos_edges)
+        while len(neg_edges) < target_count:
+            u = random.choice(target_list) # One node must be from the 'new' set
+            v = random.choice(node_list)   # The other can be anywhere allowed
+            if u != v and not G.has_edge(u, v):
+                neg_edges.append((u, v))
+        return neg_edges
+
+    train_neg = sample_negatives(train_pos, train_nodes)
+    val_neg = sample_negatives(val_pos, train_nodes | val_nodes, val_nodes)
+    test_neg = sample_negatives(test_pos, nodes, test_nodes)
+
+    # 4. Finalize
+    train_data = [(u, v, 1) for u, v in train_pos] + [(u, v, 0) for u, v in train_neg]
+    val_data = [(u, v, 1) for u, v in val_pos] + [(u, v, 0) for u, v in val_neg]
+    test_data = [(u, v, 1) for u, v in test_pos] + [(u, v, 0) for u, v in test_neg]
+
+    return train_data, val_data, test_data
 
 # ============ Train Test Split Functions - Helpers =============
 
