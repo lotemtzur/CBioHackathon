@@ -1,103 +1,102 @@
 # CBioHackathon
 
-## Protein-Protein Interaction Network Analysis and Link Prediction
-
-This project implements and evaluates various methods for predicting protein-protein interactions using graph-based approaches.
-
-## Project Overview
-
-We are developing a comprehensive framework to predict new edges (protein interactions) in biological networks using progressively sophisticated techniques:
-
-### Implemented Methods
-
-1. ✅ **Random Baseline** - Random edge prediction for baseline comparison
-2. ✅ **Common Neighbors (CN)** - Link prediction based on shared neighbors
-3. 🚧 **Random Walk** - Graph traversal-based prediction (in progress)
-4. 🚧 **Graph Neural Networks (GNN)** - Deep learning approach (in progress)
+Protein-Protein Interaction (PPI) link prediction on the STRING database network. We benchmark classical graph heuristics against GNN-based methods across two task types: **edge prediction** (transductive) and **node prediction** (inductive / cold-start).
 
 ## Dataset
 
-- **Source**: STRING database protein interaction network
-- **Files**:
-  - `string_interaction_physical.tsv` - Full dataset (~4,300 interactions, 354 proteins)
-  - `string_interaction_physical_short.tsv` - Subset for quick testing (~300 interactions, 175 proteins)
+| File | Description |
+|------|-------------|
+| `string_interaction_physical.tsv` | Full STRING network (~4 300 edges, 354 proteins) |
+| `string_interactions_short.tsv` | Subset for fast iteration (~300 edges, 175 proteins) |
+| `string_protein_sequences.fa` | FASTA protein sequences (for ESM-2 embeddings) |
+| `protein_embeddings.pkl` | Pre-computed ESM-2 (650M) embeddings |
+
+## Methods
+
+### Edge Prediction (Transductive)
+
+| Method | Script | Key Idea |
+|--------|--------|----------|
+| Random Baseline | `random_baseline.py` | Uniform random scores -- lower bound |
+| Common Neighbors | `CN_baseline/` | Weighted CN scoring with threshold tuning |
+| Random Walk w/ Restart | `markov_baseline.py` | RWR affinity matrix with alpha tuning |
+| Sequence-only MLP | `pred_by_seq_baseline.py` | Concatenated ESM-2 pair embeddings, MLP classifier (PyTorch Lightning) |
+
+### Node Prediction (Inductive / Cold-Start)
+
+| Method | Script | Key Idea |
+|--------|--------|----------|
+| Adamic-Adar + Sequence | `adamic_adar_sequence.py` | Sequence similarity creates virtual neighbors; score via AA index |
+| VGAE + MLP (GCN) | `gnn_lightning_metrics.py` | VGAE learns structure; MLP maps ESM to latent for unseen nodes |
+| VGAE + MLP (GAT) | `ALON_BEST_gat_lightning_metrics.py` | Same pipeline with multi-head GAT encoder |
+| Node-deletion GNN | `node_deletion_gnn.py` | VGAE on partial graph; evaluate reconstruction of deleted nodes |
+
+### Supporting Code
+
+| File | Purpose |
+|------|---------|
+| `utils.py` | Graph loading, train/val/test splits (edge, vertex, semi-inductive), metrics, ROC plotting |
+| `extract_proteins_representations.py` | Extract ESM-2 embeddings from FASTA to pickle |
+| `alon_files/` | VGAE experiments, topology analysis, CN vs GNN comparison scripts |
 
 ## Quick Start
 
-### 1. Common Neighbors Model
-
-#### Basic Prediction
 ```bash
-python3 common_neighbors_prediction.py string_interaction_physical.tsv --threshold 1.0 --top-k 100
+# Setup
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Generate protein embeddings (one-time, ~10 min)
+python extract_proteins_representations.py --fasta string_protein_sequences.fa
+
+# Run baselines
+python random_baseline.py
+python markov_baseline.py
+
+# Run sequence-based classifier
+python pred_by_seq_baseline.py
+
+# Run cold-start node prediction
+python adamic_adar_sequence.py
+python gnn_lightning_metrics.py
 ```
 
-#### Full Evaluation with Train/Val/Test Split
-```bash
-python3 evaluate_model.py string_interaction_physical.tsv
+## Requirements
+
 ```
-
-This will:
-- Split data into train (70%), validation (15%), test (15%)
-- Tune hyperparameters (threshold, top-k) on validation set
-- Evaluate final model on test set
-- Generate detailed performance metrics
-
-## Results
-
-### Common Neighbors Baseline
-
-**Full Dataset Performance (4,297 edges, 354 nodes):**
-- **Precision**: 44.47%
-- **Recall**: 63.47%
-- **F1 Score**: 0.523
-- **Best Threshold**: 10.0
-- **Predictions**: 922 total, 410 correct
-
-The Common Neighbors model provides a strong baseline, correctly predicting nearly half of suggested interactions while finding 2/3 of actual interactions.
+torch>=2.0.0
+fair-esm>=2.0.0
+torch-geometric
+pytorch-lightning
+torchmetrics
+scikit-learn
+numpy>=1.24.0
+pandas>=2.0.0
+networkx>=3.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+```
 
 ## Project Structure
 
 ```
 CBioHackathon/
-├── README.md                           # This file
-├── README_common_neighbors.md          # CN model documentation
-├── README_evaluation.md                # Evaluation framework guide
-├── common_neighbors_prediction.py      # CN implementation
-├── evaluate_model.py                   # Train/val/test evaluation
-├── string_interaction_physical.tsv     # Full dataset
-├── string_interaction_physical_short.tsv # Test dataset
-├── validation_results.tsv              # Hyperparameter tuning results
-└── test_predictions.tsv                # Final predictions
+├── utils.py                          # Shared graph utilities, splits and metrics
+├── extract_proteins_representations.py # ESM-2 embedding extraction
+├── random_baseline.py                # Random baseline
+├── markov_baseline.py                # Random Walk with Restart
+├── pred_by_seq_baseline.py           # Sequence-only MLP (Lightning)
+├── adamic_adar_sequence.py           # AA + sequence for node prediction
+├── gnn_lightning_metrics.py          # VGAE cold-start (GCN encoder)
+├── ALON_BEST_gat_lightning_metrics.py # VGAE cold-start (GAT encoder)
+├── ALON_BEST_gnn_lightning_metrics.py # VGAE cold-start (GCN, with t-SNE viz)
+├── node_deletion_gnn.py              # Inductive node-deletion experiment
+├── CN_baseline/                      # Common Neighbors baseline and evaluation
+├── alon_files/                       # VGAE experiments and topology analysis
+├── Report/                           # Report guidelines
+├── string_interaction_physical.tsv   # Full dataset
+├── string_interactions_short.tsv     # Small dataset
+├── string_protein_sequences.fa       # Protein sequences
+├── protein_embeddings.pkl            # Pre-computed ESM-2 embeddings
+└── requirements.txt
 ```
-
-## Documentation
-
-- **[Common Neighbors Model](README_common_neighbors.md)** - Detailed guide for CN baseline
-- **[Evaluation Framework](README_evaluation.md)** - How to evaluate models with proper train/val/test splits
-
-## Method Comparison
-
-| Method | Status | Precision | Recall | F1 Score | Notes |
-|--------|--------|-----------|--------|----------|-------|
-| Random | ✅ | TBD | TBD | TBD | Baseline comparison |
-| Common Neighbors | ✅ | 44.47% | 63.47% | 0.523 | Strong baseline |
-| Random Walk | 🚧 | - | - | - | In development |
-| GNN | 🚧 | - | - | - | In development |
-
-## Requirements
-
-```bash
-pip install pandas numpy
-```
-
-## Contributing
-
-This is a bioinformatics hackathon project exploring link prediction methods for protein interaction networks.
-
-## Next Steps
-
-1. Implement Random Walk baseline
-2. Implement GNN-based approach
-3. Compare all methods on consistent train/val/test splits
-4. Analyze biological significance of predictions
-5. Explore ensemble methods combining multiple approaches
